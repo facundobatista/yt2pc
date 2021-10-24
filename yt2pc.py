@@ -143,7 +143,6 @@ def download(show_config, main_config):
 
 def check_show(show_config, last_process, main_config):
     """Check for a specific show."""
-    download(show_config, main_config)
     now = datetime.datetime.now()
 
     if last_process is None:
