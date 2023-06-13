@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import croniter  # fades
 import dateutil.parser  # fades python-dateutil
 import yaml  # fades
-import youtube_dl  # fades
+import youtube_dl  # fades git+https://github.com/ytdl-org/youtube-dl.git
 from feedgen.feed import FeedGenerator  # fades
 from dateutil.utils import default_tzinfo
 from dateutil.tz import tzoffset
@@ -75,7 +75,10 @@ def get_playlist_content(playlist_url):
 
 def report_progress(info):
     """Report download."""
-    total = info['total_bytes']
+    total = info.get('total_bytes', info.get('total_bytes_estimate'))
+    if total is None:
+        logger.debug("Progress? No 'total' in %s", info)
+        return
     dloaded = info['downloaded_bytes']
     size_mb = total // 1024 ** 2
     perc = dloaded * 100.0 / total
@@ -122,6 +125,7 @@ def download(show_config, main_config):
 
     # build the filename with the show id and the show hours for the ones we need to download
     for item in playlist:
+        logger.debug("Found %s", item)
         if show_config['start-timestamp'] > item.date:
             logger.info("Ignoring episode (before start timestamp): %s", item)
             continue
@@ -307,11 +311,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--show', help="Work with this show only.")
     parser.add_argument('--quiet', action='store_true', help="Be quiet, unless any issue is found")
+    parser.add_argument('--verbose', action='store_true', help="Be verbose")
     parser.add_argument('config_file', help="The configuration file")
     args = parser.parse_args()
 
     # parse input
     if args.quiet:
         logger.setLevel(logging.WARNING)
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
 
     main(args.config_file, args.show)
