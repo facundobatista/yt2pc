@@ -82,7 +82,7 @@ def report_progress(info):
     dloaded = info['downloaded_bytes']
     size_mb = total // 1024 ** 2
     perc = dloaded * 100.0 / total
-    print(f"{perc:.1f}% of {size_mb:d} MB\r", end='', flush=True)
+    print(f"{perc:.1f}% of {size_mb:.0f} MB\r", end='', flush=True)
 
 
 def _download_and_process(base_path, url, video_format):
@@ -183,11 +183,12 @@ def write_podcast(show_config, main_config, all_metadata):
 
     # collect all mp3s for the given show
     all_mp3s = glob.glob(os.path.join(main_config["podcast-dir"], f"{show_id}-*.mp3"))
+    logger.info("Generating XML for %d mp3s", len(all_mp3s))
 
     for filepath in all_mp3s:
         filename = os.path.basename(filepath)
         mp3_id = filename.split('.')[0]
-        episode_id = mp3_id.split("-")[2]
+        episode_id = mp3_id.split("-", maxsplit=2)[2]
         ep_metadata = all_metadata.get(episode_id)
         if ep_metadata is None:
             logger.warning("Warning: metadata not found for episode %s", episode_id)
