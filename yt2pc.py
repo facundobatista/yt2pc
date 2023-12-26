@@ -39,21 +39,38 @@ class PlayListItem:
         return f"<PlayListItem id={self.item_id} date={self.date:%Y-%m-%d}>"
 
 
-def get_playlist_content(playlist_url):
-    """Get the content of a YouTube playlist."""
+def list_yt(playlist_url):
     # youtbe-dl is in the path because `youtube_dl` is in the virtualenv
     cmd = ["youtube-dl", "--skip-download", "--print-json", playlist_url]
     logger.info("Getting playlist metadata")
-    proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+
+    while True:
+        line = proc.stdout.readline().strip()
+        if not line:
+            break
+        yield line
+
+
+def get_playlist_content(playlist_url, filters):
+    """Get the content of a YouTube playlist."""
+    if filters is not None:
+        filters = [x.lower() for x in filters]
 
     results = []
-    for line in proc.stdout.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
+    date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=60)
+    for line in list_yt(playlist_url):
         data = json.loads(line)
-
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
+        if date < date_limit:
+            break
+
+        # apply filters if present
+        if filters is not None:
+            text_to_search = data['fulltitle'].lower()
+            if not any(f in text_to_search for f in filters):
+                continue
+
         for fmt in data['formats']:
             if fmt['ext'] == "m4a":
                 best_format = fmt['format_id']
@@ -70,6 +87,8 @@ def get_playlist_content(playlist_url):
             best_format=best_format,
         )
         results.append(plitem)
+
+    results.sort(key=lambda item: item.date, reverse=True)
     return results
 
 
@@ -116,7 +135,7 @@ def _download_and_process(base_path, url, video_format):
 
 def download(show_config, main_config):
     """Download a show."""
-    playlist = get_playlist_content(show_config['url'])
+    playlist = get_playlist_content(show_config['url'], show_config.get("filters"))
 
     show_id = show_config['id']
     mp3_location = main_config['podcast-dir']
