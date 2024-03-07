@@ -49,7 +49,10 @@ def list_yt(playlist_url):
         line = proc.stdout.readline().strip()
         if not line:
             break
-        yield line
+        shouldstop = yield line
+        if shouldstop:
+            break
+    proc.terminate()
 
 
 def get_playlist_content(playlist_url, filters):
@@ -58,18 +61,26 @@ def get_playlist_content(playlist_url, filters):
         filters = [x.lower() for x in filters]
 
     results = []
-    date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=60)
-    for line in list_yt(playlist_url):
+    date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=15)
+    list_gen = list_yt(playlist_url)
+    for line in list_gen:
         data = json.loads(line)
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
+        print("============+ D", date)
         if date < date_limit:
+            try:
+                list_gen.send(True)
+            except StopIteration:
+                pass
             break
 
         # apply filters if present
         if filters is not None:
             text_to_search = data['fulltitle'].lower()
+            print("============+ t", text_to_search)
             if not any(f in text_to_search for f in filters):
                 continue
+            print("===================== YES")
 
         for fmt in data['formats']:
             if fmt['ext'] == "m4a":
