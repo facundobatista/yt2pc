@@ -63,11 +63,11 @@ def get_playlist_content(playlist_url, filters):
     results = []
     date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=15)
     list_gen = list_yt(playlist_url)
-    for line in list_gen:
+    for idx, line in enumerate(list_gen):
         data = json.loads(line)
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
-        print("============+ D", date)
-        if date < date_limit:
+        logger.debug("        exploring episode date %s", date)
+        if date < date_limit and idx > 10:
             try:
                 list_gen.send(True)
             except StopIteration:
@@ -127,6 +127,7 @@ def _download_and_process(base_path, url, video_format):
         'format': video_format,
     }
     with youtube_dl.YoutubeDL(conf) as ydl:
+        logger.debug("Downloading from url %r", url)
         ydl.download([url])
 
     # convert to mp3
@@ -150,7 +151,7 @@ def download(show_config, main_config):
 
     show_id = show_config['id']
     mp3_location = main_config['podcast-dir']
-    already_downloaded = glob.glob(os.path.join(mp3_location, show_id) + "*")
+    already_downloaded = glob.glob(os.path.join(mp3_location, show_id) + "*.mp3")
     already_downloaded = [os.path.basename(x) for x in already_downloaded]
 
     # build the filename with the show id and the show hours for the ones we need to download
@@ -175,11 +176,14 @@ def download(show_config, main_config):
     write_podcast(show_config, main_config, metadata)
 
 
-def check_show(show_config, last_process, main_config):
+def check_show(show_config, last_process, main_config, selected_show):
     """Check for a specific show."""
     now = datetime.datetime.now()
 
-    if last_process is None:
+    if selected_show is not None:
+        logger.info("    ignoring history (forced show)")
+        download(show_config, main_config)
+    elif last_process is None:
         # never did it before, do it now
         logger.info("    downloading show for the first time")
         download(show_config, main_config)
@@ -334,7 +338,7 @@ def main(config_file_path, selected_show=None):
         logger.info("Processing show %r", show_id)
         last_process = history.get(show_id)
         logger.info("    last process: %s", last_process)
-        last_run = check_show(show_data, last_process, config['main'])
+        last_run = check_show(show_data, last_process, config['main'], selected_show)
         history.set(show_id, last_run)
 
 
