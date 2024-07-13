@@ -60,8 +60,9 @@ def get_playlist_content(playlist_url, filters):
     if filters is not None:
         filters = [x.lower() for x in filters]
 
-    results = []
-    date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=15)
+    # filter to get only the last month (or at least 10 episodes)
+    modern = []
+    date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=30)
     list_gen = list_yt(playlist_url)
     for idx, line in enumerate(list_gen):
         data = json.loads(line)
@@ -73,14 +74,17 @@ def get_playlist_content(playlist_url, filters):
             except StopIteration:
                 pass
             break
+        modern.append(data)
 
+    results = []
+    for data in modern:
         # apply filters if present
         if filters is not None:
             text_to_search = data['fulltitle'].lower()
-            print("============+ t", text_to_search)
+            logger.debug("        exploring title %r", text_to_search)
             if not any(f in text_to_search for f in filters):
                 continue
-            print("===================== YES")
+            logger.debug("            match")
 
         for fmt in data['formats']:
             if fmt['ext'] == "m4a":
@@ -89,6 +93,7 @@ def get_playlist_content(playlist_url, filters):
         else:
             raise ValueError(f"Best format not found in {data['formats']}")
 
+        date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
         plitem = PlayListItem(
             description=data['description'],
             item_id=data['display_id'],
