@@ -230,7 +230,7 @@ def write_podcast(show_config, main_config, all_metadata):
         episode_id = mp3_id.split("-", maxsplit=2)[2]
         ep_metadata = all_metadata.get(episode_id)
         if ep_metadata is None:
-            logger.warning("Warning: metadata not found for episode %s", episode_id)
+            logger.debug("ignoring mp3 in disk (no metadata): %s", episode_id)
             continue
 
         mp3_size = os.stat(filepath).st_size
