@@ -1,5 +1,3 @@
-#!/usr/bin/env fades
-
 import argparse
 import datetime
 import glob
@@ -7,13 +5,14 @@ import json
 import logging
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 
-import croniter  # fades
-import dateutil.parser  # fades python-dateutil
-import yaml  # fades
-import youtube_dl  # fades git+https://github.com/ytdl-org/youtube-dl.git
-from feedgen.feed import FeedGenerator  # fades
+import croniter
+import dateutil.parser
+import yaml
+import youtube_dl
+from feedgen.feed import FeedGenerator
 from dateutil.utils import default_tzinfo
 from dateutil.tz import tzoffset
 
@@ -133,7 +132,20 @@ def _download_and_process(base_path, url, video_format):
     }
     with youtube_dl.YoutubeDL(conf) as ydl:
         logger.debug("Downloading from url %r", url)
-        ydl.download([url])
+        attempt = 1
+        while True:
+            try:
+                ydl.download([url])
+            except Exception as exc:
+                attempt += 1
+                if attempt > 6:
+                    raise
+                logger.debug("Got error: %s", exc)
+                time.sleep(120)
+                logger.debug("Trying again (attempt=%d)", attempt)
+            else:
+                break
+
 
     # convert to mp3
     logger.info("    converting to mp3")
