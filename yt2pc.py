@@ -85,12 +85,12 @@ def get_playlist_content(playlist_url, filters):
                 continue
             logger.debug("            match")
 
-        for fmt in data['formats']:
-            if fmt['ext'] == "m4a":
-                best_format = fmt['format_id']
-                break
-        else:
+        good_formats = [fmt for fmt in data['formats'] if fmt['ext'] == "m4a"]
+        if len(good_formats) == 0:
             raise ValueError(f"Best format not found in {data['formats']}")
+        if len(good_formats) > 1:
+            logger.debug("        warning! multiple formats: %s", [fmt["format_id"] for fmt in good_formats])
+        best_format = good_formats[0]['format_id']
 
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
         plitem = PlayListItem(
@@ -119,10 +119,7 @@ def report_progress(info):
     print(f"{perc:.1f}% of {size_mb:.0f} MB\r", end='', flush=True)
 
 
-def _download_and_process(base_path, url, video_format):
-    """Download from YouTube, showing process, and leave a .mp3."""
-    logger.info("Download episode %s", base_path)
-
+def _get_by_lib(base_path, video_format, url):
     # get from yt
     conf = {
         'outtmpl': base_path,
@@ -146,6 +143,25 @@ def _download_and_process(base_path, url, video_format):
             else:
                 break
 
+
+def _get_by_process(base_path, video_format, url):
+    user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36'
+    cmd = [
+        "youtube-dl", "--verbose",
+        "--format", video_format,
+        "--user-agent", user_agent,
+        "--output", base_path,
+        url
+    ]
+    logger.debug("    cmd: %s", cmd)
+    subprocess.run(cmd)
+
+
+def _download_and_process(base_path, url, video_format):
+    """Download from YouTube, showing process, and leave a .mp3."""
+    logger.info("Download episode %s", base_path)
+    # _get_by_lib(base_path, video_format, url)
+    _get_by_process(base_path, video_format, url)
 
     # convert to mp3
     logger.info("    converting to mp3")
