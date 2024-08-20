@@ -4,6 +4,7 @@ import glob
 import json
 import logging
 import os
+import operator
 import subprocess
 import time
 from dataclasses import dataclass
@@ -11,7 +12,6 @@ from dataclasses import dataclass
 import croniter
 import dateutil.parser
 import yaml
-import youtube_dl
 from feedgen.feed import FeedGenerator
 from dateutil.utils import default_tzinfo
 from dateutil.tz import tzoffset
@@ -23,6 +23,12 @@ logger.addHandler(h)
 logger.setLevel(logging.INFO)
 
 DFLT_TZ = tzoffset("UTC", 0)
+
+FORMATS = [
+    "141",  # m4a 256k
+    "140",  # m4a 128k
+    "139",  # m4a 48k
+]
 
 
 @dataclass
@@ -39,19 +45,38 @@ class PlayListItem:
 
 
 def list_yt(playlist_url):
-    # youtbe-dl is in the path because `youtube_dl` is in the virtualenv
-    cmd = ["youtube-dl", "--skip-download", "--print-json", playlist_url]
+    """List playlist, items ordered."""
+    cmd = [
+        "yt-dlp", "--flat-playlist", "--print-json",
+        "--extractor-args", "youtubetab:approximate_date",
+        playlist_url
+    ]
     logger.info("Getting playlist metadata")
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    data = []
+    for line in proc.stdout.split("\n"):
+        line = line.strip()
+        if line:
+            datum = json.loads(line)
+            data.append(datum)
 
-    while True:
-        line = proc.stdout.readline().strip()
-        if not line:
-            break
-        shouldstop = yield line
-        if shouldstop:
-            break
-    proc.terminate()
+    data.sort(key=operator.itemgetter("upload_date"))
+    return data
+
+
+def get_episodes_metadata(episode_urls):
+    cmd = ["yt-dlp", "--dump-single-json"] + episode_urls
+    logger.info("Getting %d videos metadata", len(episode_urls))
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+
+    data = []
+    for line in proc.stdout.split("\n"):
+        line = line.strip()
+        if line:
+            datum = json.loads(line)
+            data.append(datum)
+
+    return data
 
 
 def get_playlist_content(playlist_url, filters):
@@ -59,38 +84,35 @@ def get_playlist_content(playlist_url, filters):
     if filters is not None:
         filters = [x.lower() for x in filters]
 
-    # filter to get only the last month (or at least 10 episodes)
-    modern = []
-    date_limit = default_tzinfo(datetime.datetime.now(), DFLT_TZ) - datetime.timedelta(days=30)
-    list_gen = list_yt(playlist_url)
-    for idx, line in enumerate(list_gen):
-        data = json.loads(line)
-        date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
-        logger.debug("        exploring episode date %s", date)
-        if date < date_limit and idx > 10:
-            try:
-                list_gen.send(True)
-            except StopIteration:
-                pass
-            break
-        modern.append(data)
+    # filter and get latest 10 episodes
+    useful = []
+    for data in list_yt(playlist_url):
+        logger.debug("        exploring episode: %s %s", data['upload_date'], data['title'])
 
-    results = []
-    for data in modern:
         # apply filters if present
-        if filters is not None:
-            text_to_search = data['fulltitle'].lower()
+        if filters is None:
+            useful.append(data["url"])
+        else:
+            text_to_search = data['title'].lower()
             logger.debug("        exploring title %r", text_to_search)
             if not any(f in text_to_search for f in filters):
                 continue
             logger.debug("            match")
+            useful.append(data["url"])
+    useful = useful[-10:]
 
-        good_formats = [fmt for fmt in data['formats'] if fmt['ext'] == "m4a"]
-        if len(good_formats) == 0:
+    # get metadata for useful videos
+    videos_metadata = get_episodes_metadata(useful)
+
+    results = []
+    for data in videos_metadata:
+        all_formats_id = {fmt["format_id"] for fmt in data["formats"]}
+        for desired in FORMATS:
+            if desired in all_formats_id:
+                best_format = desired
+                break
+        else:
             raise ValueError(f"Best format not found in {data['formats']}")
-        if len(good_formats) > 1:
-            logger.debug("        warning! multiple formats: %s", [fmt["format_id"] for fmt in good_formats])
-        best_format = good_formats[0]['format_id']
 
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
         plitem = PlayListItem(
@@ -103,7 +125,7 @@ def get_playlist_content(playlist_url, filters):
         )
         results.append(plitem)
 
-    results.sort(key=lambda item: item.date, reverse=True)
+    results.sort(key=operator.attrgetter("date"), reverse=True)
     return results
 
 
@@ -119,37 +141,12 @@ def report_progress(info):
     print(f"{perc:.1f}% of {size_mb:.0f} MB\r", end='', flush=True)
 
 
-def _get_by_lib(base_path, video_format, url):
-    # get from yt
-    conf = {
-        'outtmpl': base_path,
-        'progress_hooks': [report_progress],
-        'quiet': True,
-        'format': video_format,
-    }
-    with youtube_dl.YoutubeDL(conf) as ydl:
-        logger.debug("Downloading from url %r", url)
-        attempt = 1
-        while True:
-            try:
-                ydl.download([url])
-            except Exception as exc:
-                attempt += 1
-                if attempt > 6:
-                    raise
-                logger.debug("Got error: %s", exc)
-                time.sleep(120)
-                logger.debug("Trying again (attempt=%d)", attempt)
-            else:
-                break
-
-
-def _get_by_process(base_path, video_format, url):
-    user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36'
+def download_videoclip(base_path, video_format, url):
+    # user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36'
     cmd = [
-        "youtube-dl", "--verbose",
+        "yt-dlp", # "--verbose",
         "--format", video_format,
-        "--user-agent", user_agent,
+        # "--user-agent", user_agent,
         "--output", base_path,
         url
     ]
@@ -160,8 +157,7 @@ def _get_by_process(base_path, video_format, url):
 def _download_and_process(base_path, url, video_format):
     """Download from YouTube, showing process, and leave a .mp3."""
     logger.info("Download episode %s", base_path)
-    # _get_by_lib(base_path, video_format, url)
-    _get_by_process(base_path, video_format, url)
+    download_videoclip(base_path, video_format, url)
 
     # convert to mp3
     logger.info("    converting to mp3")
