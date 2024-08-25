@@ -4,8 +4,10 @@ import glob
 import json
 import logging
 import os
+import os.path
 import operator
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 
@@ -30,6 +32,9 @@ FORMATS = [
     "139",  # m4a 48k
 ]
 
+# it is installed in the virtualenv, so get it from there
+yt_dlp = os.path.join(os.path.dirname(sys.executable), "yt-dlp")
+
 
 @dataclass
 class PlayListItem:
@@ -47,7 +52,7 @@ class PlayListItem:
 def list_yt(playlist_url):
     """List playlist, items ordered."""
     cmd = [
-        "yt-dlp", "--flat-playlist", "--print-json",
+        yt_dlp, "--flat-playlist", "--print-json",
         "--extractor-args", "youtubetab:approximate_date",
         playlist_url
     ]
@@ -65,7 +70,7 @@ def list_yt(playlist_url):
 
 
 def get_episodes_metadata(episode_urls):
-    cmd = ["yt-dlp", "--dump-single-json"] + episode_urls
+    cmd = [yt_dlp, "--dump-single-json"] + episode_urls
     logger.info("Getting %d videos metadata", len(episode_urls))
     proc = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -144,7 +149,7 @@ def report_progress(info):
 def download_videoclip(base_path, video_format, url):
     # user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36'
     cmd = [
-        "yt-dlp", # "--verbose",
+        yt_dlp, # "--verbose",
         "--format", video_format,
         # "--user-agent", user_agent,
         "--output", base_path,
