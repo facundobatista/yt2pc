@@ -63,6 +63,10 @@ def list_yt(playlist_url):
         line = line.strip()
         if line:
             datum = json.loads(line)
+
+            # fix this fuzziness
+            datum["upload_date"] = datum.get("upload_date", datum.get("release_date"))
+
             data.append(datum)
 
     data.sort(key=operator.itemgetter("upload_date"))
@@ -224,7 +228,7 @@ def check_show(show_config, last_process, main_config, selected_show):
     else:
         from_cron = croniter.croniter(show_config['cron'], last_process)
         next_date = from_cron.get_next(datetime.datetime)
-        logger.info("Next date to check: %s", next_date)
+        logger.info("    next date to check: %s", next_date)
         if next_date > now:
             logger.info("    still in the future, pass")
         else:
