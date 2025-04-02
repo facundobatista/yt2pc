@@ -65,11 +65,13 @@ def list_yt(playlist_url):
             datum = json.loads(line)
 
             # fix this fuzziness
-            datum["upload_date"] = datum.get("upload_date", datum.get("release_date"))
+            out_date = datum.get("upload_date", datum.get("release_date", ""))
+            if not out_date:
+                print("============== episode without date!!", datum)
+            datum["upload_date"] = out_date
 
             data.append(datum)
 
-    data.sort(key=operator.itemgetter("upload_date"))
     return data
 
 
@@ -81,21 +83,31 @@ def get_episodes_metadata(episode_urls):
     data = []
     for line in proc.stdout.split("\n"):
         line = line.strip()
+        logger.debug("Metadata line (%d) %r", len(line), line[:50])
         if line:
             datum = json.loads(line)
-            data.append(datum)
+            if datum:
+                data.append(datum)
 
     return data
 
 
-def get_playlist_content(playlist_url, filters):
+def get_playlist_content(playlist_urls, filters):
     """Get the content of a YouTube playlist."""
     if filters is not None:
         filters = [x.lower() for x in filters]
 
+    if isinstance(playlist_urls, str):
+        # single url
+        playlist_urls = [playlist_urls]
+    all_episodes = []
+    for url in playlist_urls:
+        all_episodes.extend(list_yt(url))
+    all_episodes.sort(key=operator.itemgetter("upload_date"))
+
     # filter and get latest 10 episodes
     useful = []
-    for data in list_yt(playlist_url):
+    for data in all_episodes:
         logger.debug("        exploring episode: %s %s", data['upload_date'], data['title'])
 
         # apply filters if present
@@ -378,6 +390,7 @@ def main(config_file_path, selected_show=None):
         logger.info("    last process: %s", last_process)
         last_run = check_show(show_data, last_process, config['main'], selected_show)
         history.set(show_id, last_run)
+    logger.info("Done")
 
 
 if __name__ == '__main__':

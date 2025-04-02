@@ -2,5 +2,4 @@ croniter
 feedgen
 python-dateutil
 PyYaml
-
-git+https://github.com/ytdl-org/youtube-dl.git
+yt-dlp
