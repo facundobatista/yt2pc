@@ -8,7 +8,6 @@ import os.path
 import operator
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
 
 import croniter
@@ -29,6 +28,7 @@ DFLT_TZ = tzoffset("UTC", 0)
 FORMATS = [
     "141",  # m4a 256k
     "140",  # m4a 128k
+    "140-0",  # same, but original
     "139",  # m4a 48k
 ]
 
