@@ -23,6 +23,12 @@ MULTIPLIER = {
 
 
 def _date_aprox_parsing(text):
+    # cases:
+    #  'hace 4 meses'
+    #  '1000 vistas * hace 3 días'
+    #  '4 vistas • Transmitido hace 5 meses'
+    start = text.index("hace")
+    text = text[start:]
     hace, quant, scale = text.split()
     assert hace == "hace"
     quant = int(quant)
