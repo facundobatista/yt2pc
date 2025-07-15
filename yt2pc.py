@@ -17,7 +17,7 @@ from feedgen.feed import FeedGenerator
 from dateutil.utils import default_tzinfo
 from dateutil.tz import tzoffset
 
-from . import playlister
+import playlister
 
 
 logger = logging.getLogger()
@@ -55,34 +55,6 @@ class PlayListItem:
         return f"<PlayListItem id={self.item_id} date={self.date:%Y-%m-%d}>"
 
 
-def list_yt(playlist_url, extra_yt_params):  # FIXME:borrar
-    """List playlist, items ordered."""
-    # HACK!!
-    if False:#extra_yt_params is None:
-        params = ["--flat-playlist", "--print-json", "--extractor-args", "youtube:lang=es-419", "--extractor-args", "youtubetab:approximate_date"]
-    else:
-        params = ["--flat-playlist", "--print-json", "--extractor-args", "youtubetab:approximate_date"]
-    cmd = [yt_dlp, *params, playlist_url]
-    #print("============== cmd", cmd)
-    logger.info("Getting playlist metadata")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    data = []
-    for line in proc.stdout.split("\n"):
-        line = line.strip()
-        if line:
-            datum = json.loads(line)
-
-            # fix this fuzziness
-            out_date = datum.get("upload_date", datum.get("release_date", ""))
-            if not out_date:
-                print("============== episode without date!!", datum)
-            datum["upload_date"] = out_date
-
-            data.append(datum)
-
-    return data
-
-
 def list_yt(playlist_url, extra_yt_params):  #FIXME: limpiar extra yt params
     """List playlist ensuring all items have an upload date."""
     logger.info("Getting playlist metadata")
@@ -93,11 +65,10 @@ def list_yt(playlist_url, extra_yt_params):  #FIXME: limpiar extra yt params
         if entry.get("timestamp") is None:  # probably present, even if None
             logger.debug("--- episode without a date: %s", entry)
             continue
-        entry["upload_date"] = datetime.fromtimestamp(entry["timestamp"])
+        entry["upload_date"] = datetime.datetime.fromtimestamp(entry["timestamp"])
         data.append(entry)
 
     return data
-
 
 
 def get_episodes_metadata(episode_urls):

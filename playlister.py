@@ -31,7 +31,6 @@ def _date_aprox_parsing(text):
 
 
 def _parse_time_text(self, text):
-    print("=========== parse src", text)
     tstamp = None
     if text:
         try:
@@ -42,7 +41,6 @@ def _parse_time_text(self, text):
             dt = datetime.now() - timedelta(seconds=value)
             tstamp = int(dt.timestamp())
 
-    print("=========== parse res", tstamp)
     return tstamp
 
 
