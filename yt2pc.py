@@ -61,7 +61,6 @@ def list_yt(playlist_url):
     entries = playlister.get(playlist_url)
     data = []
     for entry in entries:
-        print("============= RAW", entry)
         if entry.get("timestamp") is None:  # probably present, even if None
             logger.debug("--- episode without a date: %s", entry)
             continue
