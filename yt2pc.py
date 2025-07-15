@@ -55,7 +55,7 @@ class PlayListItem:
         return f"<PlayListItem id={self.item_id} date={self.date:%Y-%m-%d}>"
 
 
-def list_yt(playlist_url, extra_yt_params):  #FIXME: limpiar extra yt params
+def list_yt(playlist_url):
     """List playlist ensuring all items have an upload date."""
     logger.info("Getting playlist metadata")
     entries = playlister.get(playlist_url)
@@ -88,7 +88,7 @@ def get_episodes_metadata(episode_urls):
     return data
 
 
-def get_playlist_content(playlist_urls, filters, extra_yt_params):
+def get_playlist_content(playlist_urls, filters):
     """Get the content of a YouTube playlist."""
     if filters is not None:
         filters = [x.lower() for x in filters]
@@ -98,7 +98,7 @@ def get_playlist_content(playlist_urls, filters, extra_yt_params):
         playlist_urls = [playlist_urls]
     all_episodes = []
     for url in playlist_urls:
-        all_episodes.extend(list_yt(url, extra_yt_params))
+        all_episodes.extend(list_yt(url))
     all_episodes.sort(key=operator.itemgetter("upload_date"))
 
     # filter and get latest 10 episodes
@@ -159,11 +159,9 @@ def report_progress(info):
 
 
 def download_videoclip(base_path, video_format, url):
-    # user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36'
     cmd = [
-        yt_dlp, # "--verbose",
+        yt_dlp,  # "--verbose",
         "--format", video_format,
-        # "--user-agent", user_agent,
         "--output", base_path,
         url
     ]
@@ -193,7 +191,7 @@ def _download_and_process(base_path, url, video_format):
 
 def download(show_config, main_config):
     """Download a show."""
-    playlist = get_playlist_content(show_config['url'], show_config.get("filters"), show_config.get("extra-yt-params"))
+    playlist = get_playlist_content(show_config['url'], show_config.get("filters"))
 
     show_id = show_config['id']
     mp3_location = main_config['podcast-dir']
