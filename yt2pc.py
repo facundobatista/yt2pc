@@ -17,6 +17,9 @@ from feedgen.feed import FeedGenerator
 from dateutil.utils import default_tzinfo
 from dateutil.tz import tzoffset
 
+from . import playlister
+
+
 logger = logging.getLogger()
 h = logging.StreamHandler()
 h.setFormatter(logging.Formatter("%(asctime)s %(levelname)-10s %(message)s"))
@@ -30,6 +33,9 @@ FORMATS = [
     "140",  # m4a 128k
     "140-0",  # same, but original
     "139",  # m4a 48k
+    "234",  # mp4 audio only
+    "233-1",  # mp4 audio only (es-US - original, low (default))
+    "234-1",  # mp4 audio only (es-US - original, high (default))
 ]
 
 # it is installed in the virtualenv, so get it from there
@@ -49,13 +55,15 @@ class PlayListItem:
         return f"<PlayListItem id={self.item_id} date={self.date:%Y-%m-%d}>"
 
 
-def list_yt(playlist_url):
+def list_yt(playlist_url, extra_yt_params):  # FIXME:borrar
     """List playlist, items ordered."""
-    cmd = [
-        yt_dlp, "--flat-playlist", "--print-json",
-        "--extractor-args", "youtubetab:approximate_date",
-        playlist_url
-    ]
+    # HACK!!
+    if False:#extra_yt_params is None:
+        params = ["--flat-playlist", "--print-json", "--extractor-args", "youtube:lang=es-419", "--extractor-args", "youtubetab:approximate_date"]
+    else:
+        params = ["--flat-playlist", "--print-json", "--extractor-args", "youtubetab:approximate_date"]
+    cmd = [yt_dlp, *params, playlist_url]
+    #print("============== cmd", cmd)
     logger.info("Getting playlist metadata")
     proc = subprocess.run(cmd, capture_output=True, text=True)
     data = []
@@ -75,6 +83,23 @@ def list_yt(playlist_url):
     return data
 
 
+def list_yt(playlist_url, extra_yt_params):  #FIXME: limpiar extra yt params
+    """List playlist ensuring all items have an upload date."""
+    logger.info("Getting playlist metadata")
+    entries = playlister.get(playlist_url)
+    data = []
+    for entry in entries:
+        print("============= RAW", entry)
+        if entry.get("timestamp") is None:  # probably present, even if None
+            logger.debug("--- episode without a date: %s", entry)
+            continue
+        entry["upload_date"] = datetime.fromtimestamp(entry["timestamp"])
+        data.append(entry)
+
+    return data
+
+
+
 def get_episodes_metadata(episode_urls):
     cmd = [yt_dlp, "--dump-single-json"] + episode_urls
     logger.info("Getting %d videos metadata", len(episode_urls))
@@ -92,7 +117,7 @@ def get_episodes_metadata(episode_urls):
     return data
 
 
-def get_playlist_content(playlist_urls, filters):
+def get_playlist_content(playlist_urls, filters, extra_yt_params):
     """Get the content of a YouTube playlist."""
     if filters is not None:
         filters = [x.lower() for x in filters]
@@ -102,7 +127,7 @@ def get_playlist_content(playlist_urls, filters):
         playlist_urls = [playlist_urls]
     all_episodes = []
     for url in playlist_urls:
-        all_episodes.extend(list_yt(url))
+        all_episodes.extend(list_yt(url, extra_yt_params))
     all_episodes.sort(key=operator.itemgetter("upload_date"))
 
     # filter and get latest 10 episodes
@@ -197,7 +222,7 @@ def _download_and_process(base_path, url, video_format):
 
 def download(show_config, main_config):
     """Download a show."""
-    playlist = get_playlist_content(show_config['url'], show_config.get("filters"))
+    playlist = get_playlist_content(show_config['url'], show_config.get("filters"), show_config.get("extra-yt-params"))
 
     show_id = show_config['id']
     mp3_location = main_config['podcast-dir']
