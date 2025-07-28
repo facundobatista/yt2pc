@@ -87,6 +87,26 @@ def get_episodes_metadata(episode_urls):
     return data
 
 
+def find_best_format(formats, in_spanish):
+    """Find the best format according to ordering, filtering by spanish lang or not."""
+    # print("===========formats?", in_spanish, [(fmt["format_id"], fmt.get("language"))  for fmt in formats])
+
+    # collect valid formats
+    all_formats_id = set()
+    for fmt in formats:
+        if in_spanish:
+            lang = fmt.get("language")
+            if lang is not None and lang.lower().startswith("es"):
+                all_formats_id.add(fmt["format_id"])
+        else:
+            all_formats_id.add(fmt["format_id"])
+
+    for desired in FORMATS:
+        if desired in all_formats_id:
+            logger.debug("Selected format id: %s", desired)
+            return desired
+
+
 def get_playlist_content(playlist_urls, filters):
     """Get the content of a YouTube playlist."""
     if filters is not None:
@@ -122,13 +142,12 @@ def get_playlist_content(playlist_urls, filters):
 
     results = []
     for data in videos_metadata:
-        all_formats_id = {fmt["format_id"] for fmt in data["formats"]}
-        for desired in FORMATS:
-            if desired in all_formats_id:
-                best_format = desired
-                break
-        else:
-            raise ValueError(f"Best format not found in {data['formats']}")
+        logger.debug("Inspecting episode %s", data["fulltitle"])
+        best_format = find_best_format(data["formats"], in_spanish=True)
+        if best_format is None:
+            best_format = find_best_format(data["formats"], in_spanish=False)
+            if best_format is None:
+                raise ValueError(f"Best format not found in {data['formats']}")
 
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
         plitem = PlayListItem(
