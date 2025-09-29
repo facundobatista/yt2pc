@@ -27,6 +27,10 @@ def _date_aprox_parsing(text):
     #  'hace 4 meses'
     #  '1000 vistas * hace 3 días'
     #  '4 vistas • Transmitido hace 5 meses'
+    #  'Se actualizó hoy'
+    if "hoy" in text:
+        return 3600  # 1h
+
     start = text.index("hace")
     text = text[start:]
     hace, quant, scale = text.split()
