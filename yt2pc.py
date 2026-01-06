@@ -91,7 +91,11 @@ def get_episodes_metadata(episode_urls):
 
 def find_best_format(formats, in_spanish):
     """Find the best format according to ordering, filtering by spanish lang or not."""
-    # print("===========formats?", in_spanish, [(fmt["format_id"], fmt.get("language"))  for fmt in formats])
+    # print(
+    #     "===========formats?",
+    #     in_spanish,
+    #     [(fmt["format_id"], fmt.get("language"))  for fmt in formats]
+    # )
 
     # collect valid formats
     all_formats_id = set()

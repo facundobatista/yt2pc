@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor.youtube._tab import YoutubeTabBaseInfoExtractor
@@ -21,15 +21,38 @@ MULTIPLIER = {
     "años": 365 * 24 * 60 * 60,
 }
 
+MONTHS = {
+    "ene": 1,
+    "feb": 2,
+    "mar": 3,
+    "abr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "ago": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dic": 12,
+}
+
 
 def _date_aprox_parsing(text):
-    # cases:
-    #  'hace 4 meses'
-    #  '1000 vistas * hace 3 días'
-    #  '4 vistas • Transmitido hace 5 meses'
-    #  'Se actualizó hoy'
     if "hoy" in text:
         return 3600  # 1h
+
+    if "ayer" in text:
+        return 3600 * 24
+
+    start = text.find("por última vez el")
+    if start > 0:
+        text = text[start + len("por última vez el"):]
+        sd, sm, sy = text.split()
+        y = int(sy)
+        m = MONTHS[sm]
+        d = int(sd)
+        delta = date.today() - date(y, m, d)
+        return delta.days * 3600 * 24
 
     start = text.index("hace")
     text = text[start:]
