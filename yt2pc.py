@@ -32,10 +32,12 @@ FORMATS = [
     "141",  # m4a 256k
     "140",  # m4a 128k
     "140-0",  # same, but original
+    "140-1",  # same, but original
     "139",  # m4a 48k
     "234",  # mp4 audio only
     "233-1",  # mp4 audio only (es-US - original, low (default))
     "234-1",  # mp4 audio only (es-US - original, high (default))
+    "91-0",  # mp4   256x144, "es"
 ]
 
 # it is installed in the virtualenv, so get it from there
