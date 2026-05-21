@@ -38,6 +38,7 @@ FORMATS = [
     "233-1",  # mp4 audio only (es-US - original, low (default))
     "234-1",  # mp4 audio only (es-US - original, high (default))
     "91-0",  # mp4   256x144, "es"
+    "18",
 ]
 
 # it is installed in the virtualenv, so get it from there
@@ -91,11 +92,8 @@ def get_episodes_metadata(episode_urls):
 
 def find_best_format(formats, in_spanish):
     """Find the best format according to ordering, filtering by spanish lang or not."""
-    # print(
-    #     "===========formats?",
-    #     in_spanish,
-    #     [(fmt["format_id"], fmt.get("language"))  for fmt in formats]
-    # )
+    _debug_fmts = [(fmt["format_id"], fmt.get("language")) for fmt in formats]
+    logger.debug("Finding formats in_spanish=%s: %s", in_spanish, _debug_fmts)
 
     # collect valid formats
     all_formats_id = set()
