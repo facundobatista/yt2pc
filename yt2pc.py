@@ -31,13 +31,10 @@ DFLT_TZ = tzoffset("UTC", 0)
 FORMATS = [
     "141",  # m4a 256k
     "140",  # m4a 128k
-    "140-0",  # same, but original
-    "140-1",  # same, but original
     "139",  # m4a 48k
     "234",  # mp4 audio only
-    "233-1",  # mp4 audio only (es-US - original, low (default))
-    "234-1",  # mp4 audio only (es-US - original, high (default))
-    "91-0",  # mp4   256x144, "es"
+    "233",  # mp4 audio only
+    "91",  # mp4
     "18",
 ]
 
@@ -52,22 +49,56 @@ class PlayListItem:
     webpage_url: str
     title: str
     date: datetime.date
-    best_format: str
+    best_format_id: str
 
     def __str__(self):
         return f"<PlayListItem id={self.item_id} date={self.date:%Y-%m-%d}>"
 
 
-def list_yt(playlist_url):
+class Timestamper:
+    """Get a (maybe forced) timestamp for entries, cache in disk."""
+
+    def __init__(self, timestamps_file):
+        self.timestamps_file = timestamps_file
+        if os.path.exists(timestamps_file):
+            self.tstamp = self._load()
+        else:
+            self.tstamp = {}
+
+    def _load(self):
+        data = {}
+        with open(self.timestamps_file, "rt") as fh:
+            for line in fh:
+                datum = json.loads(line)
+                data[datum["url"]] = datetime.datetime.fromisoformat(datum["dt"])
+        return data
+
+    def _add(self, url, dt):
+        line = json.dumps({"url": url, "dt": dt.isoformat()}) + "\n"
+        with open(self.timestamps_file, "at") as fh:
+            fh.write(line)
+
+    def get(self, entry):
+        """Get or produce a timestamp for the entry."""
+        if entry.get("timestamp") is None:
+            url = entry["url"]
+            if url in self.tstamp:
+                return self.tstamp[url]
+            now = datetime.datetime.now()
+            self._add(url, now)
+            return now
+        else:
+            return datetime.datetime.fromtimestamp(entry["timestamp"])
+
+
+def list_yt(playlist_url, timestamper):
     """List playlist ensuring all items have an upload date."""
     logger.info("Getting playlist metadata")
     entries = playlister.get(playlist_url)
     data = []
     for entry in entries:
-        if entry.get("timestamp") is None:  # probably present, even if None
-            logger.debug("--- episode without a date: %s", entry)
-            continue
-        entry["upload_date"] = datetime.datetime.fromtimestamp(entry["timestamp"])
+        ud = timestamper.get(entry)
+        entry["upload_date"] = ud
         data.append(entry)
 
     return data
@@ -90,28 +121,31 @@ def get_episodes_metadata(episode_urls):
     return data
 
 
-def find_best_format(formats, in_spanish):
+def find_best_format(formats):
     """Find the best format according to ordering, filtering by spanish lang or not."""
-    _debug_fmts = [(fmt["format_id"], fmt.get("language")) for fmt in formats]
-    logger.debug("Finding formats in_spanish=%s: %s", in_spanish, _debug_fmts)
+    formats = [(fmt["format_id"], fmt.get("language")) for fmt in formats]
+    logger.debug("Finding formats: %s", formats)
 
-    # collect valid formats
-    all_formats_id = set()
-    for fmt in formats:
-        if in_spanish:
-            lang = fmt.get("language")
-            if lang is not None and lang.lower().startswith("es"):
-                all_formats_id.add(fmt["format_id"])
-        else:
-            all_formats_id.add(fmt["format_id"])
+    # if there are formats explicit in spanish, use only that
+    spanish_formats = [(fid, lang) for fid, lang in formats if (lang or "").startswith("es")]
+    logger.debug("Found %d spanish formats", len(spanish_formats))
+    if spanish_formats:
+        formats = spanish_formats
 
-    for desired in FORMATS:
-        if desired in all_formats_id:
-            logger.debug("Selected format id: %s", desired)
-            return desired
+    def _selector(fmt):
+        fid, _ = fmt
+        for idx, preference in enumerate(FORMATS):
+            if fid.startswith(preference):
+                return idx
+        return 99999999999
+
+    ordered = sorted(formats, key=_selector)
+    selected = ordered[0]  # top one
+    logger.debug("Selected format: %r", selected)
+    return selected[0]  # only the id
 
 
-def get_playlist_content(playlist_urls, filters):
+def get_playlist_content(playlist_urls, filters, timestamper):
     """Get the content of a YouTube playlist."""
     if filters is not None:
         filters = [x.lower() for x in filters]
@@ -121,13 +155,15 @@ def get_playlist_content(playlist_urls, filters):
         playlist_urls = [playlist_urls]
     all_episodes = []
     for url in playlist_urls:
-        all_episodes.extend(list_yt(url))
+        all_episodes.extend(list_yt(url, timestamper))
     all_episodes.sort(key=operator.itemgetter("upload_date"))
 
     # filter and get latest 10 episodes
     useful = []
     for data in all_episodes:
         logger.debug("        exploring episode: %s %s", data['upload_date'], data['title'])
+        if data["title"] is None:
+            continue
 
         # apply filters if present
         if filters is None:
@@ -147,11 +183,9 @@ def get_playlist_content(playlist_urls, filters):
     results = []
     for data in videos_metadata:
         logger.debug("Inspecting episode %s", data["fulltitle"])
-        best_format = find_best_format(data["formats"], in_spanish=True)
-        if best_format is None:
-            best_format = find_best_format(data["formats"], in_spanish=False)
-            if best_format is None:
-                raise ValueError(f"Best format not found in {data['formats']}")
+        best_format_id = find_best_format(data["formats"])
+        if best_format_id is None:
+            raise ValueError(f"Best format not found in {data['formats']}")
 
         date = default_tzinfo(dateutil.parser.parse(data['upload_date']), DFLT_TZ)
         plitem = PlayListItem(
@@ -160,7 +194,7 @@ def get_playlist_content(playlist_urls, filters):
             title=data['fulltitle'],
             webpage_url=data['webpage_url'],
             date=date,
-            best_format=best_format,
+            best_format_id=best_format_id,
         )
         results.append(plitem)
 
@@ -180,10 +214,10 @@ def report_progress(info):
     print(f"{perc:.1f}% of {size_mb:.0f} MB\r", end='', flush=True)
 
 
-def download_videoclip(base_path, video_format, url):
+def download_videoclip(base_path, video_format_id, url):
     cmd = [
         yt_dlp,  # "--verbose",
-        "--format", video_format,
+        "--format", video_format_id,
         "--output", base_path,
         url
     ]
@@ -191,10 +225,10 @@ def download_videoclip(base_path, video_format, url):
     subprocess.run(cmd)
 
 
-def _download_and_process(base_path, url, video_format):
+def _download_and_process(base_path, url, video_format_id):
     """Download from YouTube, showing process, and leave a .mp3."""
     logger.info("Download episode %s", base_path)
-    download_videoclip(base_path, video_format, url)
+    download_videoclip(base_path, video_format_id, url)
 
     # convert to mp3
     logger.info("    converting to mp3")
@@ -213,7 +247,11 @@ def _download_and_process(base_path, url, video_format):
 
 def download(show_config, main_config):
     """Download a show."""
-    playlist = get_playlist_content(show_config['url'], show_config.get("filters"))
+    playlist = get_playlist_content(
+        show_config['url'],
+        show_config.get("filters"),
+        Timestamper(main_config["timestamps-file"]),
+    )
 
     show_id = show_config['id']
     mp3_location = main_config['podcast-dir']
@@ -234,7 +272,7 @@ def download(show_config, main_config):
 
         logger.info("Downloading episode: %s", item)
         base_path = os.path.join(mp3_location, base_name)
-        _download_and_process(base_path, item.webpage_url, item.best_format)
+        _download_and_process(base_path, item.webpage_url, item.best_format_id)
 
     # prepare some metadata from the playlist to write in the podcast
     metadata = {item.item_id: item for item in playlist}

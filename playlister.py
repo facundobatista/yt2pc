@@ -98,7 +98,7 @@ def _parse_time_text(self, text, report_failure=False):
     try:
         value = _date_aprox_parsing(text)
     except Exception as exc:
-        print(f"ERROR PARSING {text!r}: {exc!r}")
+        # print(f"ERROR PARSING {text!r}: {exc!r}")
         return
 
     dt = datetime.now() - timedelta(seconds=value)
